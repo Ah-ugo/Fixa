@@ -58,7 +58,7 @@ def provider_update(provider_id: str, data: ProviderUpdate):
     return {"message": "Provider profile updated successfully"}
 
 
-@router.get("/top-rated", response_model=List[dict])
+@router.get("/all/top-rated", response_model=List[dict])
 def top_rated_providers():
     """Retrieve top-rated providers"""
     return get_top_rated_providers()
