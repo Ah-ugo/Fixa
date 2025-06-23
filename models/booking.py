@@ -15,25 +15,29 @@ class BookingStatus(str, Enum):
 
 # Booking Model
 class Booking(BaseModel):
-    id: str
-    user_id: str  # References User ID
-    provider_id: str  # References Provider ID
-    service_id: str  # References Service ID
+    _id: str
+    user_id: str
+    provider_id: str
+    service_id: str
     status: BookingStatus = BookingStatus.PENDING
-    scheduled_time: datetime
-    payment_method: str  # wallet, cash_on_delivery
+    scheduled_date: datetime
+    location: str
+    additional_notes: Optional[str] = None
+    payment_method: str
     paid: bool = False
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime
+
 
 
 # Booking creation model
 class BookingCreate(BaseModel):
-    user_id: str
     provider_id: str
     service_id: str
     scheduled_date: datetime
     location: str
+    payment_method: str
     additional_notes: Optional[str] = None
+
 
 # Booking update model
 class BookingUpdate(BaseModel):

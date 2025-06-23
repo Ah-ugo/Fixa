@@ -7,7 +7,9 @@ from fastapi import UploadFile
 
 # Get list of available services
 def get_services():
-    services = list(services_collection.find({}, {"_id": 0}))
+    services = list(services_collection.find())
+    for service in services:
+        service["_id"] = str(service["_id"])
     return services
 
 

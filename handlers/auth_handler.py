@@ -2,7 +2,9 @@ from datetime import timedelta
 from db import users_collection
 from services.auth_service import hash_password, verify_password, create_access_token, authenticate_user
 from bson import ObjectId
+from services.email_service import EmailService
 
+email_service = EmailService()
 
 # Register user or provider
 def register_user(data: dict):
@@ -16,6 +18,26 @@ def register_user(data: dict):
     result = users_collection.insert_one(data)
     return {"message": "User registered successfully", "user_id": str(result.inserted_id)}
 
+# with email
+# def register_user(data: dict):
+#     existing_user = users_collection.find_one({"email": data["email"]})
+#     if existing_user:
+#         return {"error": "Email already registered"}
+#
+#     data["password"] = hash_password(data["password"])
+#     data["role"] = data.get("role", "user")
+#     data["created_at"] = datetime.now()
+#     data["is_verified"] = False  # Email not verified yet
+#
+#     result = users_collection.insert_one(data)
+#
+#     # Send OTP for verification
+#     email_service.send_otp_email(data["email"])
+#
+#     return {
+#         "message": "User registered successfully. Please verify your email.",
+#         "user_id": str(result.inserted_id)
+#     }
 
 # Login user
 def login_user(email: str, password: str):
@@ -60,15 +82,21 @@ def switch_role(user_id: str):
     return {"message": f"Role switched to {new_role}"}
 
 
-# Verify OTP for account activation (Dummy function for now)
 def verify_otp(email: str, otp: str):
-    return {"message": "OTP verified successfully"}  # Implement OTP logic
+    return email_service.verify_otp(email, otp)
 
 
-# Forgot password (Send reset link - Dummy function for now)
 def forgot_password(email: str):
-    return {"message": "Password reset link sent"}  # Implement email sending logic
 
+    user = users_collection.find_one({"email": email})
+    if not user:
+        return {"error": "Email not registered"}
+
+    # Generate and send reset token
+    token = email_service.generate_reset_token(email)
+    email_service.send_password_reset_email(email, token)
+
+    return {"message": "Password reset link sent to your email"}
 
 # Reset password
 def reset_password(email: str, new_password: str):

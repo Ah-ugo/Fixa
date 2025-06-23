@@ -18,7 +18,8 @@ router = APIRouter()
 # Generate Monnify payment link (Users)
 @router.post("/fund")
 def fund_wallet(amount: float, user: User = Depends(get_current_user)):
-    return generate_monnify_payment_link(user.id, amount)
+    print(user)
+    return generate_monnify_payment_link(user["_id"], amount)
 
 
 # Confirm wallet funding via webhook (Monnify)
@@ -33,7 +34,7 @@ def confirm_funding(reference: str):
 # Get user wallet balance
 @router.get("/balance")
 def wallet_balance(user: User = Depends(get_current_user)):
-    return get_wallet_balance(user.id)
+    return get_wallet_balance(user["_id"])
 
 
 # Get provider wallet balance
