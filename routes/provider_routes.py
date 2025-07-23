@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from bson import ObjectId
+from bson.errors import InvalidId
+from db import users_collection
 from models.provider import ProviderUpdate, ToggleAvailability
 from services.auth_service import get_current_user
 from handlers.provider_handler import (
@@ -11,7 +13,8 @@ from handlers.provider_handler import (
     update_provider_profile,
     get_top_rated_providers,
     get_providers_nearby,
-    delete_provider
+    delete_provider,
+serialize_provider
 )
 
 router = APIRouter()
@@ -34,33 +37,49 @@ def get_single_provider(provider_id: str):
 
 @router.get("/service/{service_id}", response_model=List[dict])
 def filter_providers_by_service(service_id: str):
-    """Get providers offering a specific service
-
-    Args:
-        service_id: The ID of the service to filter providers by
-
-    Returns:
-        List of providers offering the specified service
-
-    Raises:
-        HTTPException: If the service ID is invalid or no providers are found
-    """
+    """Get providers offering a specific service"""
     try:
-        providers = get_providers_by_service(service_id)
-        if not providers:
+        # Convert to ObjectId for consistent comparison
+        service_obj_id = ObjectId(service_id)
+
+        # Find providers that have this service in their services_offered array
+        providers = users_collection.find(
+            {
+                "role": "provider",
+                "services_offered": service_id  # Compare as string to string
+            },
+            {"password": 0}
+        )
+
+        providers_list = []
+        for provider in providers:
+            provider = serialize_provider(provider)
+            # Get the specific service details
+            if 'services_offered' in provider:
+                for offered_service in provider.get('services', []):
+                    if str(offered_service['_id']) == service_id:
+                        provider['matched_service'] = offered_service
+                        break
+            providers_list.append(provider)
+
+        if not providers_list:
             raise HTTPException(
                 status_code=404,
                 detail="No providers found for this service"
             )
-        return providers
-    except HTTPException:
-        raise
+
+        return providers_list
+
     except Exception as e:
+        if isinstance(e, InvalidId):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid service ID format"
+            )
         raise HTTPException(
-            status_code=400,
+            status_code=500,
             detail=f"Error retrieving providers: {str(e)}"
         )
-
 
 @router.patch("/{provider_id}/availability", response_model=dict)
 def update_availability(
