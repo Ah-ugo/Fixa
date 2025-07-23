@@ -53,7 +53,7 @@ wallets_collection = db["wallets"]
 transactions_collection = db["transactions"]
 reviews_collection = db["reviews"]
 support_tickets_collection = db["support_tickets"]
-admins_collection = db["admins"]
+# admins_collection = db["admins"]
 notifications_collection = db["notifications"]
 messages_collection = db["messages"]
 

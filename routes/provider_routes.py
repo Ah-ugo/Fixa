@@ -23,7 +23,7 @@ def list_all_providers():
     return get_all_providers()
 
 
-@router.get("/{provider_id}", response_model=dict)
+@router.get("/provider/{provider_id}", response_model=dict)
 def get_single_provider(provider_id: str):
     """Get provider details by ID"""
     provider = get_provider_by_id(provider_id)
