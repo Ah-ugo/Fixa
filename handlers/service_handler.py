@@ -1,9 +1,69 @@
-from db import services_collection
+from db import services_collection, users_collection
 from bson import ObjectId
-from typing import Optional
+from typing import Optional, List, Dict, Union, Any
 from services.cloudinary_service import upload_image
 from fastapi import UploadFile
 
+
+def serialize_service(service):
+    if service and '_id' in service:
+        service['_id'] = str(service['_id'])
+    return service
+
+
+def add_services_to_provider(provider_id: str, service_ids: List[str]) -> Dict[str, Union[int, str]]:
+    """Add services to a provider's offerings with validation"""
+    # Convert to ObjectId for query
+    try:
+        service_object_ids = [ObjectId(id) for id in service_ids]
+    except:
+        return {"error": "Invalid service ID format"}
+
+    # Verify all services exist
+    existing_count = services_collection.count_documents({
+        "_id": {"$in": service_object_ids}
+    })
+    if existing_count != len(service_ids):
+        return {"error": "One or more services not found"}
+
+    result = users_collection.update_one(
+        {"_id": ObjectId(provider_id), "role": "provider"},
+        {"$addToSet": {"services_offered": {"$each": service_ids}}}
+    )
+
+    if result.matched_count == 0:
+        return {"error": "Provider not found"}
+    return {"modified_count": result.modified_count}
+
+
+def remove_services_from_provider(provider_id: str, service_ids: List[str]) -> Dict[str, Union[int, str]]:
+    """Remove services from a provider's offerings"""
+    result = users_collection.update_one(
+        {"_id": ObjectId(provider_id), "role": "provider"},
+        {"$pull": {"services_offered": {"$in": service_ids}}}
+    )
+
+    if result.matched_count == 0:
+        return {"error": "Provider not found"}
+    return {"modified_count": result.modified_count}
+
+
+def get_provider_services(provider_id: str) -> Union[List[Dict], Dict[str, str]]:
+    """Get all services offered by a provider with full service details"""
+    provider = users_collection.find_one(
+        {"_id": ObjectId(provider_id), "role": "provider"},
+        {"services_offered": 1}
+    )
+    if not provider:
+        return {"error": "Provider not found"}
+
+    try:
+        service_ids = [ObjectId(id) for id in provider.get("services_offered", [])]
+    except:
+        return {"error": "Invalid service ID format in provider record"}
+
+    services = services_collection.find({"_id": {"$in": service_ids}})
+    return [serialize_service(s) for s in services]
 
 # Get list of available services
 def get_services():

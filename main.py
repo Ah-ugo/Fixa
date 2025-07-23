@@ -12,6 +12,8 @@ from routes.admin_routes import router as admin_router
 from routes.notification_routes import router as notifications_router
 from routes.provider_routes import router as provider_router
 from routes.review_routes import router as review_router
+from routes.upload_routes import router as upload_router
+from routes.provider_dashboard_routes import router as dashboard_router
 
 app = FastAPI(
     title="Fixa API",
@@ -37,7 +39,10 @@ app.include_router(admin_router, prefix="/api/admin", tags=["Users"])
 app.include_router(booking_router, prefix="/api/bookings", tags=["Bookings"])
 app.include_router(notifications_router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(provider_router, prefix="/api/providers", tags=["Providers"])
+app.include_router(dashboard_router, prefix="/api/providers/dashboard", tags=["Provider Dashboard"])
 app.include_router(review_router, prefix="/api/review", tags=["Reviews"])
+app.include_router(upload_router, prefix="/api/file", tags=["Upload"])
+
 
 @app.get("/")
 def root():

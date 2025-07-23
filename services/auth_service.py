@@ -81,3 +81,36 @@ def get_current_admin(token: str = Depends(oauth2_scheme)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+
+
+
+def get_current_provider(token: str = Depends(oauth2_scheme)):
+    """Retrieve the provider details from the token."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+
+        # Fetch user from database and verify they're a provider
+        user = users_collection.find_one({
+            "_id": ObjectId(user_id),
+            "role": "provider"
+        })
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Provider access required"
+            )
+
+        # Convert ObjectId to string and remove sensitive info
+        user["_id"] = str(user["_id"])
+        return user
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
