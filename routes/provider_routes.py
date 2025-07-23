@@ -34,8 +34,32 @@ def get_single_provider(provider_id: str):
 
 @router.get("/service/{service_id}", response_model=List[dict])
 def filter_providers_by_service(service_id: str):
-    """Get providers offering a specific service"""
-    return get_providers_by_service(service_id)
+    """Get providers offering a specific service
+
+    Args:
+        service_id: The ID of the service to filter providers by
+
+    Returns:
+        List of providers offering the specified service
+
+    Raises:
+        HTTPException: If the service ID is invalid or no providers are found
+    """
+    try:
+        providers = get_providers_by_service(service_id)
+        if not providers:
+            raise HTTPException(
+                status_code=404,
+                detail="No providers found for this service"
+            )
+        return providers
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error retrieving providers: {str(e)}"
+        )
 
 
 @router.patch("/{provider_id}/availability", response_model=dict)

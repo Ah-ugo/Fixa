@@ -57,23 +57,65 @@ def get_provider_by_id(provider_id: str):
 
     return provider
 
+
 def get_providers_by_service(service_id: str):
-    """Get providers offering a specific service"""
+    """Get providers offering a specific service
+
+    Args:
+        service_id: The ID of the service to search for
+
+    Returns:
+        List of serialized provider documents
+
+    Raises:
+        InvalidId: If the service_id is not a valid ObjectId
+    """
     try:
-        # Convert service_id to ObjectId for consistent comparison
+        # Validate service_id format first
         service_obj_id = ObjectId(service_id)
-        # Find providers that have this service in their services_offered array
+
+        # Check if service exists
+        if not services_collection.find_one({"_id": service_obj_id}):
+            return []
+
+        # Find providers offering this service
         providers = users_collection.find(
             {
                 "role": "provider",
-                "services_offered": service_obj_id  # Compare ObjectId to ObjectId
+                "services_offered": service_obj_id
             },
-            {"password": 0}
+            {
+                "password": 0,
+                "services_offered": 0  # Exclude from response
+            }
         )
-        return [serialize_provider(p) for p in providers]
+
+        # Include service details in each provider's response
+        service = services_collection.find_one(
+            {"_id": service_obj_id},
+            {"name": 1, "description": 1, "price": 1, "image": 1}
+        )
+
+        serialized_providers = []
+        for provider in providers:
+            provider = serialize_provider(provider)
+            provider["service_details"] = serialize_service(service)
+            serialized_providers.append(provider)
+
+        return serialized_providers
+
+    except InvalidId:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid service ID format"
+        )
     except Exception as e:
         print(f"Error in get_providers_by_service: {str(e)}")
-        return []
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while fetching providers"
+        )
+
 
 def toggle_provider_availability(provider_id: str, is_available: bool):
     """Toggle provider's availability status"""
