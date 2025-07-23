@@ -1,10 +1,11 @@
-from db import users_collection
+from db import users_collection, services_collection
 from typing import List, Optional
 from bson import ObjectId
 from handlers.service_handler import (
     add_services_to_provider,
     remove_services_from_provider,
-    get_provider_services
+    get_provider_services,
+serialize_service
 )
 
 def serialize_provider(provider):
