@@ -14,10 +14,7 @@ from handlers.provider_handler import (
     delete_provider
 )
 
-router = APIRouter(
-    prefix="/providers",
-    tags=["Providers"]
-)
+router = APIRouter()
 
 
 @router.get("/", response_model=List[dict])
