@@ -3,7 +3,7 @@ from typing import List
 from bson import ObjectId
 from bson.errors import InvalidId
 from db import users_collection
-from models.provider import ProviderUpdate, ToggleAvailability
+from models.provider import ProviderUpdate, ToggleAvailability, ProviderResponse
 from services.auth_service import get_current_user
 from handlers.provider_handler import (
     get_all_providers,
@@ -14,21 +14,23 @@ from handlers.provider_handler import (
     get_top_rated_providers,
     get_providers_nearby,
     delete_provider,
-serialize_provider
+serialize_provider,
+    get_provider_rating_stats,
+    get_recent_reviews
+
 )
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=List[ProviderResponse])
 def list_all_providers():
-    """Get all providers (no approval filter)"""
+    """Get all providers with their rating information"""
     return get_all_providers()
 
-
-@router.get("/{provider_id}", response_model=dict)
+@router.get("/{provider_id}", response_model=ProviderResponse)
 def get_single_provider(provider_id: str):
-    """Get provider details by ID"""
+    """Get provider details by ID including rating information"""
     provider = get_provider_by_id(provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
@@ -127,6 +129,38 @@ def list_top_rated_providers():
 def find_nearby_providers(location: str):
     """Find providers near a location"""
     return get_providers_nearby(location)
+
+
+@router.get("/{provider_id}/ratings", response_model=dict)
+def get_provider_ratings(provider_id: str):
+    """Get detailed rating statistics for a provider"""
+    try:
+        # Verify provider exists
+        provider = users_collection.find_one(
+            {"_id": ObjectId(provider_id), "role": "provider"}
+        )
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        return get_provider_rating_stats(provider_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{provider_id}/reviews", response_model=List[dict])
+def get_provider_reviews(provider_id: str, limit: int = 10):
+    """Get reviews for a provider"""
+    try:
+        # Verify provider exists
+        provider = users_collection.find_one(
+            {"_id": ObjectId(provider_id), "role": "provider"}
+        )
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        return get_recent_reviews(provider_id, limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{provider_id}", response_model=dict)

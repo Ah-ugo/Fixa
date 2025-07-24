@@ -9,18 +9,42 @@ class UserRole(str, Enum):
     PROVIDER = "provider"
     ADMIN = "admin"
 
+class RatingBreakdown(BaseModel):
+    one_star: int = Field(0, alias="1")
+    two_star: int = Field(0, alias="2")
+    three_star: int = Field(0, alias="3")
+    four_star: int = Field(0, alias="4")
+    five_star: int = Field(0, alias="5")
+
+    class Config:
+        allow_population_by_field_name = True
+
+class RatingStats(BaseModel):
+    average: float = 0.0
+    count: int = 0
+    breakdown: RatingBreakdown
+
+
+class ReviewPreview(BaseModel):
+    id: str
+    user_id: str
+    rating: float
+    comment: Optional[str] = None
+    created_at: datetime
+
 
 class ProviderBase(BaseModel):
-    user_id: str = Field(..., description="Reference to User ID")
-    services_offered: List[str] = Field(
-        default_factory=list,
-        description="List of service IDs this provider offers"
-    )
+    full_name: str
+    email: str
+    role: str = "provider"
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    profile_image: Optional[str] = None
+    services_offered: List[str] = Field(default_factory=list)
     bio: Optional[str] = None
     experience_years: Optional[int] = 0
     rating: float = 0.0
     base_price: float = 0.0
-    address: Optional[str] = None
     skills: List[str] = []
     is_available: bool = True
 
@@ -30,15 +54,16 @@ class ProviderCreate(ProviderBase):
 
 class ProviderResponse(ProviderBase):
     id: str = Field(..., alias="_id")
-    created_at: datetime
-    profile_image: Optional[str] = None
+    created_at: Optional[datetime] = None
+    services: List[dict] = Field(default_factory=list)
+    rating_stats: RatingStats
+    recent_reviews: List[ReviewPreview] = Field(default_factory=list)
 
     class Config:
         allow_population_by_field_name = True
         json_encoders = {
-            datetime: lambda v: v.isoformat()
+            datetime: lambda v: v.isoformat() if v else None
         }
-
 
 class ProviderUpdate(BaseModel):
     bio: Optional[str] = Field(None, example="Experienced plumber with 5+ years of service.")

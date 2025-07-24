@@ -1,7 +1,41 @@
 from datetime import datetime
+from typing import Optional, List
 from db import wallets_collection, transactions_collection, bookings_collection
 from bson.objectid import ObjectId
+from models.wallet import (
+    TransactionType,
+    TransactionStatus,
+    WalletTransaction,
+    WalletTransactionResponse
+)
 
+
+# def serialize_transaction(transaction) -> dict:
+#     if transaction and '_id' in transaction:
+#         transaction['id'] = str(transaction['_id'])
+#         transaction.pop('_id')
+#     return transaction
+
+def serialize_transaction(transaction) -> dict:
+    """Properly serialize a transaction document from MongoDB"""
+    if not transaction:
+        return None
+
+    # Set default status if missing
+    status = transaction.get("status", TransactionStatus.COMPLETED)
+
+    serialized = {
+        "id": str(transaction["_id"]),
+        "user_id": transaction.get("user_id"),
+        "amount": transaction.get("amount", 0.0),
+        "transaction_type": transaction.get("transaction_type"),
+        "status": status,  # Use the status we determined
+        "reference": transaction.get("reference", ""),
+        "description": transaction.get("description"),
+        "metadata": transaction.get("metadata"),
+        "created_at": transaction.get("created_at", datetime.utcnow())
+    }
+    return {k: v for k, v in serialized.items() if v is not None}
 
 # Generate Monnify payment link for funding wallet
 def generate_monnify_payment_link(user_id: str, amount: float):
@@ -76,6 +110,68 @@ def approve_withdrawal(withdrawal_id: str):
         {"$set": {"status": "approved"}}
     )
     return {"message": "Withdrawal approved"}
+
+
+def get_recent_transactions(user_id: str, limit: int = 5) -> List[WalletTransaction]:
+    """Get recent transactions for a user"""
+    try:
+        transactions = transactions_collection.find(
+            {"user_id": user_id}
+        ).sort("created_at", -1).limit(limit)
+
+        return [serialize_transaction(t) for t in transactions]
+    except Exception as e:
+        raise Exception(f"Error fetching transactions: {str(e)}")
+
+
+def get_transaction_history(
+        user_id: str,
+        page: int = 1,
+        limit: int = 10,
+        transaction_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+) -> WalletTransactionResponse:
+    """Get paginated transaction history with filters"""
+    try:
+        query = {"user_id": user_id}
+
+        # Apply filters
+        if transaction_type:
+            query["transaction_type"] = transaction_type
+        if start_date and end_date:
+            query["created_at"] = {"$gte": start_date, "$lte": end_date}
+        elif start_date:
+            query["created_at"] = {"$gte": start_date}
+        elif end_date:
+            query["created_at"] = {"$lte": end_date}
+
+        # Get total count
+        total = transactions_collection.count_documents(query)
+
+        # Get paginated results
+        transactions = transactions_collection.find(query).sort("created_at", -1).skip((page - 1) * limit).limit(limit)
+
+        # Properly serialize each transaction
+        serialized_transactions = [serialize_transaction(t) for t in transactions if t]
+
+        return WalletTransactionResponse(
+            transactions=serialized_transactions,
+            total=total,
+            page=page,
+            limit=limit
+        )
+    except Exception as e:
+        raise Exception(f"Error fetching transaction history: {str(e)}")
+
+
+def get_transaction_details(transaction_id: str) -> Optional[WalletTransaction]:
+    """Get details of a specific transaction"""
+    try:
+        transaction = transactions_collection.find_one({"_id": ObjectId(transaction_id)})
+        return serialize_transaction(transaction) if transaction else None
+    except Exception as e:
+        raise Exception(f"Error fetching transaction details: {str(e)}")
 
 
 # Pay for a service using wallet balance
