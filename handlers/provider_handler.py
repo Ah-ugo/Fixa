@@ -177,15 +177,41 @@ def update_provider_profile(
         {"$set": update_data}
     )
 
-def get_top_rated_providers(limit: int = 10):
-    """Get top rated providers sorted by rating"""
-    providers = users_collection.find(
-        {"role": "provider"}
-    ).sort("rating", -1).limit(limit)
-    return [serialize_provider(p) for p in providers]
 
-def get_providers_nearby(location: str):
-    """Find providers near a location"""
+def get_top_rated_providers(limit: int = 10) -> List[dict]:
+    """Get top rated providers sorted by rating with full rating information"""
+    providers = users_collection.find(
+        {"role": "provider"},
+        {"password": 0}
+    ).sort("rating", -1).limit(limit)
+
+    result = []
+    for provider in providers:
+        provider = serialize_provider(provider)
+
+        # Get full service details for the provider
+        if 'services_offered' in provider:
+            try:
+                service_ids = [ObjectId(id) for id in provider['services_offered']]
+                services = services_collection.find({"_id": {"$in": service_ids}})
+                provider['services'] = [serialize_service(s) for s in services]
+            except:
+                provider['services'] = []
+        else:
+            provider['services'] = []
+
+        # Add rating information
+        provider_id = str(provider['_id'])
+        provider['rating_stats'] = get_provider_rating_stats(provider_id)
+        provider['recent_reviews'] = get_recent_reviews(provider_id)
+
+        result.append(provider)
+
+    return result
+
+
+def get_providers_nearby(location: str) -> List[dict]:
+    """Find providers near a location with full rating information"""
     providers = users_collection.find(
         {
             "role": "provider",
@@ -193,7 +219,30 @@ def get_providers_nearby(location: str):
         },
         {"password": 0}
     )
-    return [serialize_provider(p) for p in providers]
+
+    result = []
+    for provider in providers:
+        provider = serialize_provider(provider)
+
+        # Get full service details for the provider
+        if 'services_offered' in provider:
+            try:
+                service_ids = [ObjectId(id) for id in provider['services_offered']]
+                services = services_collection.find({"_id": {"$in": service_ids}})
+                provider['services'] = [serialize_service(s) for s in services]
+            except:
+                provider['services'] = []
+        else:
+            provider['services'] = []
+
+        # Add rating information
+        provider_id = str(provider['_id'])
+        provider['rating_stats'] = get_provider_rating_stats(provider_id)
+        provider['recent_reviews'] = get_recent_reviews(provider_id)
+
+        result.append(provider)
+
+    return result
 
 
 def get_provider_rating_stats(provider_id: str) -> Dict:
