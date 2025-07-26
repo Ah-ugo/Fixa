@@ -10,13 +10,24 @@ from handlers.booking_handler import (
     delete_booking,
 )
 from services.auth_service import get_current_user
+from db import services_collection
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
-# Create a new booking (Authenticated users only)
+
 @router.post("/", response_model=Booking)
 def create_new_booking(booking_data: BookingCreate, user: dict = Depends(get_current_user)):
-    booking = create_booking({**booking_data.dict(), "user_id": user["_id"]})
+
+    service = services_collection.find_one({"_id": ObjectId(booking_data.service_id)})
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    booking = create_booking({
+        **booking_data.dict(),
+        "user_id": user["_id"],
+        "service_id": str(service["_id"])  # Ensure service_id is properly converted
+    })
+
     if not booking:
         raise HTTPException(status_code=400, detail="Booking could not be created")
     return booking

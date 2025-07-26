@@ -1,14 +1,22 @@
 from datetime import datetime
 from typing import Optional
-from db import bookings_collection
+from db import bookings_collection, services_collection
 from models.booking import BookingStatus
 from bson import ObjectId
 
 # Create a new booking
 def create_booking(booking_data: dict) -> Optional[dict]:
+    # Get the service to get the price
+    service = services_collection.find_one({"_id": ObjectId(booking_data["service_id"])})
+    if not service:
+        return None
+
+    # Add the service price to the booking
+    booking_data["price"] = service["price"]
     booking_data["status"] = BookingStatus.PENDING.value
     booking_data["created_at"] = datetime.utcnow()
     booking_data["paid"] = False
+
     result = bookings_collection.insert_one(booking_data)
     if result.inserted_id:
         booking_data["_id"] = str(result.inserted_id)

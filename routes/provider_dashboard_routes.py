@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from datetime import datetime, timedelta
 from typing import List, Optional
 from bson import ObjectId
+from bson.errors import InvalidId
 from models.provider import (
     DashboardStatsResponse,
     EarningsResponse,
@@ -32,15 +33,7 @@ router = APIRouter()
 async def get_dashboard_stats(
         current_provider: dict = Depends(get_current_provider)
 ):
-    """
-    Get provider dashboard statistics including:
-    - Total services offered
-    - Total bookings
-    - Pending bookings
-    - Recent earnings
-    - Average rating
-    """
-    provider_id = current_provider["_id"]
+    provider_id = str(current_provider["_id"])
 
     try:
         # Total services offered
@@ -48,23 +41,23 @@ async def get_dashboard_stats(
 
         # Total bookings
         total_bookings = bookings_collection.count_documents({
-            "provider_id": str(provider_id)
+            "provider_id": provider_id
         })
 
         # Pending bookings
         pending_bookings = bookings_collection.count_documents({
-            "provider_id": str(provider_id),
+            "provider_id": provider_id,
             "status": "pending"
         })
 
-        # Recent earnings (last 30 days)
+        # Recent earnings (include both accepted and completed)
         thirty_days_ago = datetime.now() - timedelta(days=30)
         earnings_result = bookings_collection.aggregate([
             {
                 "$match": {
-                    "provider_id": str(provider_id),
-                    "status": "completed",
-                    "completed_at": {"$gte": thirty_days_ago}
+                    "provider_id": provider_id,
+                    "status": {"$in": ["completed", "accepted"]},
+                    "created_at": {"$gte": thirty_days_ago}
                 }
             },
             {
@@ -87,10 +80,8 @@ async def get_dashboard_stats(
             "recent_earnings": recent_earnings,
             "average_rating": avg_rating
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # --------------------------
 # Earnings Management
@@ -98,17 +89,14 @@ async def get_dashboard_stats(
 
 @router.get("/earnings", response_model=EarningsResponse)
 async def get_earnings(
-        period: str = Query("month", description="Time period: week, month, or year"),
+        period: str = Query("month"),
         current_provider: dict = Depends(get_current_provider)
 ):
-    """
-    Get provider earnings for a specific time period
-    """
-    provider_id = current_provider["_id"]
-
     try:
-        # Calculate date range
+        provider_id = str(current_provider["_id"])
         now = datetime.now()
+
+        # Calculate date range
         if period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
@@ -118,13 +106,13 @@ async def get_earnings(
         else:
             raise HTTPException(status_code=400, detail="Invalid period specified")
 
-        # Get earnings data
+        # Match both completed status and created_at date
         pipeline = [
             {
                 "$match": {
-                    "provider_id": str(provider_id),
-                    "status": "completed",
-                    "completed_at": {"$gte": start_date}
+                    "provider_id": provider_id,
+                    "status": {"$in": ["completed", "accepted"]},  # Include accepted bookings
+                    "created_at": {"$gte": start_date}
                 }
             },
             {
@@ -138,19 +126,10 @@ async def get_earnings(
 
         result = list(bookings_collection.aggregate(pipeline))
 
-        if not result:
-            return {
-                "period": period,
-                "total_earnings": 0,
-                "total_bookings": 0,
-                "start_date": start_date.isoformat(),
-                "end_date": now.isoformat()
-            }
-
         return {
             "period": period,
-            "total_earnings": result[0]["total_earnings"],
-            "total_bookings": result[0]["total_bookings"],
+            "total_earnings": result[0]["total_earnings"] if result else 0,
+            "total_bookings": result[0]["total_bookings"] if result else 0,
             "start_date": start_date.isoformat(),
             "end_date": now.isoformat()
         }
@@ -158,37 +137,79 @@ async def get_earnings(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # --------------------------
 # Booking Management
 # --------------------------
 
+
+@router.get("/migrate_bookings")
+def migrate_booking_prices():
+    try:
+        # Get all bookings without a price field
+        bookings = bookings_collection.find({"price": {"$exists": False}})
+        updated_count = 0
+
+        for booking in bookings:
+            try:
+                # Handle both string and ObjectId service_ids
+                service_id = booking["service_id"]
+
+                # If service_id is already an ObjectId (in case of direct DB access)
+                if isinstance(service_id, ObjectId):
+                    service_obj_id = service_id
+                else:
+                    # Try to convert string to ObjectId
+                    service_obj_id = ObjectId(service_id)
+
+                # Find the service
+                service = services_collection.find_one({"_id": service_obj_id})
+
+                if service:
+                    # Update the booking with the service price
+                    result = bookings_collection.update_one(
+                        {"_id": booking["_id"]},
+                        {"$set": {"price": service["price"]}}
+                    )
+                    if result.modified_count > 0:
+                        updated_count += 1
+
+            except (InvalidId, KeyError) as e:
+                print(f"Skipping booking {booking.get('_id')} - invalid service_id: {str(e)}")
+                continue
+
+        return {
+            "message": f"Successfully updated {updated_count} bookings",
+            "updated_count": updated_count
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Migration failed: {str(e)}"
+        )
+
+
 @router.get("/bookings", response_model=List[BookingResponse])
 async def get_provider_bookings(
-        status: Optional[str] = Query(None, description="Filter by booking status"),
-        limit: int = Query(10, description="Number of bookings to return"),
+        status: Optional[str] = Query(None),
+        limit: int = Query(10),
         current_provider: dict = Depends(get_current_provider)
 ):
-    """
-    Get provider's bookings with optional status filtering
-    """
-    provider_id = current_provider["_id"]
-
     try:
-        query = {"provider_id": str(provider_id)}
+        query = {"provider_id": str(current_provider["_id"])}
         if status:
             query["status"] = status
 
         bookings = list(bookings_collection.find(query)
-                        .sort("scheduled_date", -1)
-                        .limit(limit))
+                      .sort("scheduled_date", -1)
+                      .limit(limit))
 
         return [{
             "id": str(booking["_id"]),
             "service_id": booking.get("service_id"),
             "user_id": booking["user_id"],
             "status": booking["status"],
-            "price": booking["price"],
+            "price": booking["price"],  # Now guaranteed to exist
             "scheduled_date": booking["scheduled_date"],
             "created_at": booking.get("created_at"),
             "completed_at": booking.get("completed_at")
@@ -196,7 +217,6 @@ async def get_provider_bookings(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.put("/bookings/{booking_id}/accept")
 async def accept_booking(
@@ -468,24 +488,19 @@ async def remove_my_service(
 # Reviews and Ratings
 # --------------------------
 
-@router.get("/reviews", response_model=List[dict])
+@router.get("/all/reviews", response_model=List[dict])
 async def get_my_reviews(
         current_provider: dict = Depends(get_current_provider)
 ):
-    """
-    Get all reviews for the current provider
-    """
-    provider_id = current_provider["_id"]
-
     try:
-        reviews = list(reviews_collection.find({"provider_id": str(provider_id)})
-                       .sort("created_at", -1))
+        provider_id = str(current_provider["_id"])
+        reviews = list(reviews_collection.find({"provider_id": provider_id}))
 
         return [{
             "id": str(review["_id"]),
             "user_id": review["user_id"],
             "rating": review["rating"],
-            "comment": review.get("comment"),
+            "comment": review.get("comment", ""),
             "created_at": review["created_at"]
         } for review in reviews]
 
