@@ -14,7 +14,7 @@ from datetime import timedelta
 
 router = APIRouter()
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 3600
 
 
 # Register user or provider
