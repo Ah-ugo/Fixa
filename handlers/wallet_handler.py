@@ -174,24 +174,47 @@ def get_transaction_details(transaction_id: str) -> Optional[WalletTransaction]:
         raise Exception(f"Error fetching transaction details: {str(e)}")
 
 
-# Pay for a service using wallet balance
 def pay_for_service(booking_id: str):
+    # Get the booking
     booking = bookings_collection.find_one({"_id": ObjectId(booking_id)})
     if not booking:
         return {"error": "Booking not found"}
 
+    # Get the associated service to get the price
+    service = services_collection.find_one({"_id": ObjectId(booking["service_id"])})
+    if not service:
+        return {"error": "Service not found"}
+
+    price = service["price"]
+
+    # Check wallet balance
     wallet = wallets_collection.find_one({"user_id": booking["user_id"]})
-    if not wallet or wallet["balance"] < booking["price"]:
+    if not wallet or wallet["balance"] < price:
         return {"error": "Insufficient wallet balance"}
 
+    # Process payment
     wallets_collection.update_one(
         {"user_id": booking["user_id"]},
-        {"$inc": {"balance": -booking["price"]}}
+        {"$inc": {"balance": -price}}
     )
+
+    # Update booking status
     bookings_collection.update_one(
         {"_id": ObjectId(booking_id)},
         {"$set": {"paid": True}}
     )
+
+    # Create transaction record
+    transaction = {
+        "user_id": booking["user_id"],
+        "amount": price,
+        "transaction_type": "payment",
+        "status": "completed",
+        "description": f"Payment for service {service['name']}",
+        "created_at": datetime.utcnow()
+    }
+    transactions_collection.insert_one(transaction)
+
     return {"message": "Payment successful"}
 
 
