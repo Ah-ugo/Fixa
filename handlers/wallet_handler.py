@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from db import wallets_collection, transactions_collection, bookings_collection
+from db import wallets_collection, transactions_collection, bookings_collection, services_collection
 from bson.objectid import ObjectId
 from models.wallet import (
     TransactionType,
