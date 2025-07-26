@@ -31,7 +31,6 @@ def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Access denied")
     return booking
 
-# Get all bookings for the authenticated user
 @router.get("/all/user", response_model=list[Booking])
 def get_user_all_bookings(user: dict = Depends(get_current_user)):
     return get_user_bookings(user["_id"])

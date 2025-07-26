@@ -29,7 +29,6 @@ def get_booking_by_id(booking_id: str) -> Optional[dict]:
 # Get all bookings for a user
 def get_user_bookings(user_id: str) -> list:
     bookings = bookings_collection.find({"user_id": user_id})
-    print(bookings)
     return [{**b, "_id": str(b["_id"])} for b in bookings]
 
 # Get all bookings for a provider

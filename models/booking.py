@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
+from bson import ObjectId
 
 
 # Booking Status
@@ -15,7 +16,7 @@ class BookingStatus(str, Enum):
 
 # Booking Model
 class Booking(BaseModel):
-    _id: str
+    id: str = Field(alias="_id")
     user_id: str
     provider_id: str
     service_id: str
@@ -26,6 +27,12 @@ class Booking(BaseModel):
     payment_method: str
     paid: bool = False
     created_at: datetime
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            ObjectId: lambda v: str(v)
+        }
 
 
 
